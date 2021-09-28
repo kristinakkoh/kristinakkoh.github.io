@@ -1,5 +1,5 @@
 ---
-title: "Assignment 1"
+title: "Kristina Koh_A1"
 output: html_document
 ---
 
