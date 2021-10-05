@@ -115,7 +115,8 @@ smc_elderly <-
     percent_elderly = elderly/total_pop*100
   ) %>% 
   filter(!is.na(percent_elderly))
-
+```
+##Putting this as text because it is halting
 smc_blockgroups <- block_groups("CA", "San Mateo", cb = T, progress_bar = F)
 
 elderly_pal <- colorNumeric(
@@ -154,12 +155,11 @@ leaflet() %>%
     values = ~percent_elderly,
     title = "% over 65"
   )
-```
 
 
 
 
-```{r}
+Putting this as text because it doesn't work!
 library(tigris)
 library(sf)
 library(censusapi)
@@ -246,4 +246,3 @@ nfo_pop_2010 <- smc_pop_2010 %>%
   st_as_sf()
   
 mapview(nfo_pop_2020, zcol = "pop")
-```
