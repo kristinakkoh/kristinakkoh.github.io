@@ -2,167 +2,22 @@
 title: "KristinaKoh_A2"
 output: html_document
 ---
-This is under a HUGE work in progress. Will have updates later in the week (at least I hope so)
+Second update but still not done
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, waning=FALSE, message=FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
 ```
 
-```{r}
-library(tidyverse)
-library(sf)
-library(censusapi)
-library(tigris)
-library(mapview)
-ca_counties <- counties("CA", cb = T, progress_bar = F)
-mapview(ca_counties)
-st_crs(ca_counties)
-bay_county_names <-
-  c(
-    "Alameda",
-    "Contra Costa",
-    "Marin",
-    "Napa",
-    "San Francisco",
-    "San Mateo",
-    "Santa Clara",
-    "Solano",
-    "Sonoma"
-  )
-
-bay_counties <-
-  counties("CA", cb = T, progress_bar = F) %>%
-  filter(NAME %in% bay_county_names)
-ggplot(bay_counties) + geom_sf()
-```
-
-```{r}
-ca_cities <- places("CA", cb = T, progress_bar = FALSE)
-bay_cities <- ca_cities[bay_counties, ]
-mapview(bay_counties, alpha.regions = 0) + mapview(bay_cities)
-usa_zips <- 
-  zctas(cb = T, progress_bar = F)
-
-bay_zips <-
-  usa_zips %>% 
-  st_centroid() %>% 
-  .[bay_counties, ] %>% 
-  st_set_geometry(NULL) %>% 
-  left_join(usa_zips %>% select(GEOID10)) %>% 
-  st_as_sf()
-
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 
-acs_vars_2019_5yr <-
-  listCensusMetadata(
-    name = "2019/acs/acs5",
-    type = "variables"
-  )
-
-smc_sexbyage <-
-  getCensus(
-    name = "acs/acs5",
-    vintage = 2019,
-    region = "block group:*", 
-    regionin = "state:06+county:081",
-    vars = "group(B01001)"
-  ) %>%
-  mutate(
-    cbg =
-      paste0(state,county,tract,block_group)
-  ) %>% 
-  select(!c(GEO_ID,state,county,tract,block_group,NAME) & !ends_with(c("EA","MA","M"))) %>%
-  pivot_longer(
-    ends_with("E"),
-    names_to = "variable",
-    values_to = "estimate"
-  ) %>%
-  left_join(
-    acs_vars_2019_5yr %>% 
-      select(name, label), 
-    by = c("variable" = "name")
-  ) %>% 
-  select(-variable) %>% 
-  separate(
-    label,
-    into = c(NA,NA,"sex","age"),
-    sep = "!!"
-  ) %>% 
-  filter(!is.na(age))
-
-smc_elderly <- 
-  smc_sexbyage %>% 
-  mutate(
-    elderly = 
-      ifelse(
-        age %in% c(
-          "65 and 66 years",
-          "67 to 69 years",
-          "70 to 74 years",
-          "75 to 79 years",
-          "80 to 84 years",
-          "85 years and over"
-        ),
-        estimate,
-        NA
-      )
-  ) %>% 
-  group_by(cbg) %>% 
-  summarize(
-    elderly = sum(elderly, na.rm = T),
-    total_pop = sum(estimate, na.rm = T)
-  ) %>% 
-  mutate(
-    percent_elderly = elderly/total_pop*100
-  ) %>% 
-  filter(!is.na(percent_elderly))
 ```
-##Putting this as text because it is halting
-smc_blockgroups <- block_groups("CA", "San Mateo", cb = T, progress_bar = F)
 
-elderly_pal <- colorNumeric(
-  palette = "Blues",
-  domain = 
-    smc_elderly$percent_elderly
-)
-
-leaflet() %>% 
-  addProviderTiles(provider = providers$CartoDB.Positron) %>% 
-  addPolygons(
-    data = 
-      smc_elderly %>% 
-        left_join(
-          smc_blockgroups %>% select(GEOID), 
-          by = c("cbg" = "GEOID")
-        ) %>% 
-        st_as_sf(),
-    fillColor = ~elderly_pal (percent_elderly),
-    color = "white",
-    opacity = 0.5,
-    fillOpacity = 0.75,
-    weight = 1,
-    label = ~paste0(
-      round(percent_elderly), 
-      "% over age 65"
-    ),
-    highlightOptions = highlightOptions(
-      weight = 2,
-      opacity = 1
-    )
-  ) %>% 
-  addLegend(
-    data = smc_elderly,
-    pal = elderly_pal,
-    values = ~percent_elderly,
-    title = "% over 65"
-  )
-
-
-
-
-Putting this as text because it doesn't work!
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 library(tigris)
 library(sf)
 library(censusapi)
+library(dplyr)
+library(mapview)
 
 Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 
@@ -180,40 +35,22 @@ smc_pop_2020 <-
     pop = P1_001N
   )
 
+
 smc_pop_2010 <-
   getCensus(
     name = "dec/pl",
     vintage = 2010,
-    region = "block group", 
+    region = "block: *", 
     regionin = "state:06+county:085",
-    vars = "BLOCK"
-  ) %>% 
+    vars = "P001001")%>% 
   transmute(
     block =
-      paste0(state,county,tract,block_group),
-    pop= BLOCK
-  )
+      paste0(state,county,tract,block),
+    pop = P001001
 
-dec_vars_2020 <-
-  listCensusMetadata(
-    name = "2020/dec/pl",
-    type = "variables"
-  )
-dec_vars_2010 <-
-  listCensusMetadata(
-    name = "2020/dec/pl",
-    type = "variables"
   )
 
 
-dec_vars_2020 %>% 
-  filter(grepl("P1",name)) %>% 
-  select(name, label) %>% 
-  arrange(name)
-dec_vars_2010 %>% 
-  filter(grepl("P1",name)) %>% 
-  select(name, label) %>% 
-  arrange(name)
 
 library(devtools)
 install_github('walkerke/tigris')
@@ -227,7 +64,18 @@ smc_blocks_2010 <- blocks("CA", "Santa Clara", year = 2010, progress_bar = F)
 sc_boundary_2010 <- places("CA", progress_bar = F) %>% 
   filter(NAME == "Cupertino")
 
-nfo_pop_2020 <- smc_pop_2020 %>% 
+
+
+bounds<-0
+bounds <- (merge(smc_pop_2020,smc_pop_2010, by = "block",all=T))
+bounds <- bounds%>%
+  rename(pop2020=pop.x)
+bounds <- bounds%>%
+  rename(pop2010=pop.y)
+perc_diff<-bounds %>% mutate(percentdiff= 100*(pop2020-pop2010)/((pop2010+pop2020)/2))
+perc_diff<-na.omit(perc_diff)
+
+map_perc_diff <- perc_diff %>% 
   left_join(smc_blocks_2020 %>% select(block = GEOID20)) %>% 
   st_as_sf() %>% 
   st_centroid() %>% 
@@ -236,13 +84,5 @@ nfo_pop_2020 <- smc_pop_2020 %>%
   left_join(smc_blocks_2020 %>% select(block = GEOID20)) %>% 
   st_as_sf()
 
-nfo_pop_2010 <- smc_pop_2010 %>% 
-  left_join(smc_blocks_2010 %>% select(GEOID10)) %>% 
-  st_as_sf() %>% 
-  st_centroid() %>% 
-  .[sc_boundary_2010, ] %>% 
-  st_set_geometry(NULL) %>% 
-  left_join(smc_blocks_2010 %>% select(GEOID10)) %>% 
-  st_as_sf()
-  
-mapview(nfo_pop_2020, zcol = "pop")
+mapview(map_perc_diff, zcol = "percentdiff")
+```
