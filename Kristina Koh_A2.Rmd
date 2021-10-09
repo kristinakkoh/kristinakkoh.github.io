@@ -2,10 +2,11 @@
 title: "KristinaKoh_A2"
 output: html_document
 ---
-Second update but still not done
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
 ```
+Initially I assumed blocks would look more in terms of outlining them. Some of them are a lot larger than others. However, I came across a portion on the northeast side of Cupertino that shows a block enclosing another. Upon further browsing, I could see a couple other "donut" looking blocks that enclosed others. Some things I would want the reader to be aware of are that between Between 2010 and 2020, the blocks had changed, which I think resulted in the white blanks in some of the areas. Also, even though some blocks had population data when during the percent difference in population change, there were "divide by 0" errors that resulted in NaN errors. These caveats aside, I was surprised to see that a high change in density did not necessarily equate to a high change in population. This may have been due to a math error but I thought they would have a stronger correlation. But when I overlay the maps, they don't seem to agree.
+Reflect on your findings. Explain any key assumptions you made in the analysis, or caveats about the data sources that you think the reader should be aware of. Publish all of this work in a GitHub webpage titled “yourname_A2”. For this assignment, a support script is available by request from the TAs (after you have demonstrated initial effort).
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
 Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
@@ -84,5 +85,27 @@ map_perc_diff <- perc_diff %>%
   left_join(smc_blocks_2020 %>% select(block = GEOID20)) %>% 
   st_as_sf()
 
-mapview(map_perc_diff, zcol = "percentdiff")
+
+
+
+#for absolute change in density
+popdense<- bounds %>% 
+  mutate(dense_pop=(pop2020-pop2010/43560))
+popdense<-na.omit(popdense)
+
+map_popdense <- popdense %>% 
+  left_join(smc_blocks_2020 %>% select(block = GEOID20)) %>% 
+  st_as_sf() %>% 
+  st_centroid() %>% 
+  .[sc_boundary, ] %>% 
+  st_set_geometry(NULL) %>% 
+  left_join(smc_blocks_2020 %>% select(block = GEOID20)) %>% 
+  st_as_sf()
+
+```
+```{r}
+library(RColorBrewer)
+mapview(map_popdense,zcol="dense_pop", label="Population Density Change (population per acre")
+mapview(map_perc_diff, zcol = "percentdiff", label = "Population percentage difference")
+mapview(map_perc_diff, zcol = "percentdiff", label = "Population percentage difference")+mapview(map_popdense,zcol="dense_pop", label="Population Density Change (population per acre")
 ```
