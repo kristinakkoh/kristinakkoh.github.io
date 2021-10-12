@@ -1,0 +1,183 @@
+---
+title: "Heat Vulnerability"
+author: "Kristina Koh"
+date: "10/11/2021"
+output: html_document
+---
+
+Using the data dictionary mentioned in Chapter 3.1 to browse the PUMS data structure, I mapped the percentage of people with the vulnerability characteristics as closely as I could to the factors we discussed last week. The total number of people that may be vulnerable to heatwaves was 247,208 people. Although nothing directly overlaps between our heatwave factors and data dictionary variables, here are some I picked that might lead to one of the factors I had in the survey which was: food, water, personal fan, dorm AC, public area AC, and shaded areas. 
+
+
+People with vulnerability characteristics in the data dictionary:
+Bath = 2 which is a place that has no bath or shower
+FS = 1 which is that they receive food stamps
+HFL = house heating fuel
+INSP = 0 which means they don't have fire, hazard, or flood insurance
+REFR = 2 means they don't have a fridge
+RWAT = 2 means they don't have hot and cold running water
+SINK = 2 means they don't have a sink with a faucet
+SMARTPHONE = 2 means they don't have a smartphone
+GRPIP = 90 which means 90% of income goes to rent
+PLM =2 which means no plumbing
+
+It was hard to have electricity cost be included in these options because things like "didn't use electricity" were binned the same as "bill included in rent".
+
+
+The pseudocode I used for the ifelse statement was:
+if no smartphone or bath or fridge or sink or running water or plumbing, then HV. else, if food stamps and no insurance and 90% income or more goes to rent, then HV.
+
+Reasoning:
+I was thinking of "if they don't have _____, they probably don't have AC or cooling systems". Then for the food stamps and the insurance, I was thinking if someone has food stamps and no weather-type insurance AND they spend over 90% of their income on rent, they may not be able to afford cooling systems or avoid heatwaves. 
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+
+
+temp <- tempfile()
+download.file("https://www2.census.gov/programs-surveys/acs/data/pums/2019/1-Year/csv_hca.zip",destfile = temp)
+
+pums_hca_2019_1yr <- read_csv(unzip(temp,"psam_h06.csv"))
+
+unlink(temp)
+
+pums_2019_1yr <- getCensus(
+  name = "acs/acs1/pums",
+  vintage = 2019,
+  region = "public use microdata area:*", 
+  regionin = "state:06",
+  vars = c(
+    "SERIALNO",
+    "SPORDER",
+    "PWGTP",
+    "WGTP",
+    "NP",
+    "HHL",
+    "HINCP",
+    "TEN",
+    "BATH",
+    "FS",
+    "HFL",
+    "INSP",
+    "REFR",
+    "RWAT",
+    "SINK",
+    "SMARTPHONE",
+    "GRPIP",
+    "PLM"
+  )
+)
+
+saveRDS(pums_2019_1yr, "pums_2019_1yr")
+
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+bay_counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% bay_county_names)
+
+bay_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[bay_counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+bay_pums <-
+  pums_2019_1yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area,5,"left","0")
+  ) %>% 
+  filter(PUMA %in% bay_pumas$PUMACE10)
+
+bay_pums_heat <-
+  bay_pums %>% 
+  filter(!duplicated(SERIALNO)) %>% 
+  mutate(PWGTP = as.numeric(PWGTP),
+    heat_vulnerability = ifelse(SMARTPHONE==2|BATH==2|REFR==2|SINK==2|RWAT==2|PLM==2|(FS==1&INSP==0&GRPIP>90),
+                                PWGTP,0)
+  ) %>% 
+  group_by(PUMA) %>% 
+  summarize(
+    perc_heat_vulnerability =
+      sum(heat_vulnerability, na.rm =T)/sum(PWGTP, na.rm = T)*100
+  ) %>% 
+  left_join(
+    bay_pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>% 
+  st_as_sf()
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pums_pal_heat <- colorNumeric(
+  palette = "Reds",
+  domain = bay_pums_heat$perc_heat_vulnerability
+)
+
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = bay_pums_heat,
+    fillColor = ~pums_pal_heat(bay_pums_heat$perc_heat_vulnerability),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      round(bay_pums_heat$perc_heat_vulnerability), 
+      "% people with heat vulnerability"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_pums_heat,
+    pal = pums_pal_heat,
+    values = ~bay_pums_heat$perc_heat_vulnerability,
+    title = "% people with heat vulnerability"
+  )
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+counting_heat <-
+  bay_pums %>% 
+  filter(!duplicated(SERIALNO)) %>% 
+  mutate(PWGTP = as.numeric(PWGTP),
+    heat_vulnerability = ifelse(SMARTPHONE==2|BATH==2|REFR==2|SINK==2|RWAT==2|PLM==2|(FS==1&INSP==0&GRPIP>90),
+                                PWGTP,0))
+
+sum=sum(counting_heat$heat_vulnerability)
+sprintf("%s people may experience heat vulnerability in the Bay Area", sum)
+```
