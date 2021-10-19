@@ -1,0 +1,164 @@
+---
+title: "KristinaKoh-A4"
+author: "Kristina Koh"
+date: "10/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+From looking at the regular plot without it being filled, we can see that there’s a large proportion of people over 25 years old that have a bachelor’s degree or higher. From the regular plot, it looks like “white alone” has the highest number of people with bachelor’s degrees. Although this may be true, when we see the filled plot and look at “white alone” for bachelor’s degree and some college or associate’s degree, we can see that there is the same proportion of white alone households that have bachelor’s and associate’s/some college. This shows the significance of having multiple avenues for data visualization for the same data! In addition to this observation, for the “some other race alone”, I am assuming they are minorities not included in the five main categories. It looks like for some other race alone, there is a smaller proportion of educational attainment as degrees increase. This is interesting because it is completely opposite of the “two or more races” category. Although the numbers are lower, their educational attainment proportion increases as the education increases (with a slight dip between associate’s/some college vs. bachelor’s). For most of these race categories, we can see that the maximum proportion is usually for “some college/associate’s degree” which is expected as the age for this data is 25 and above - people merely aren’t done with their education or they are taking a break/have other priorities before continuing their education. If this had an age 40+ cutoff, that would be cool to see how many people pursue their GED, Associate’s, or Bachelor’s later in life!
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(censusapi)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+
+acs_vars_2019_5yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs5",
+    type = "variables"
+  )
+bay_education_white <-
+  getCensus(
+    name = "acs/acs5",
+    vintage = 2019,
+    region = "county:001,013,041,055,075,081,085,095,097",
+    regionin = "state:06",
+    vars = "group(C15002A)"
+  ) %>%
+  select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+  pivot_longer(
+    ends_with("E"),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>% 
+      select(name, label)
+  ) %>% 
+  select(-name) %>% 
+  separate(
+    label,
+    into = c(NA,NA,NA,"education"),
+    sep = "!!"
+  ) %>% 
+  filter(!is.na(education))
+
+census_race_categories <- data.frame(
+  code = c("A","B","C","D","E","F","G"),
+  category =
+    c(
+      "White Alone",
+      "Black or African American",
+      "American Indian and Alaska Native Alone",
+      "Asian Alone",
+      "Native Hawaiian and Other Pacific Islander Alone",
+      "Some Other Race Alone",
+      "Two or More Races"
+    ))
+
+census_race_categories <- 
+  c(
+    "White Alone",
+    "Black or African American",
+    "American Indian and Alaska Native Alone",
+    "Asian Alone",
+    "Native Hawaiian and Other Pacific Islander Alone",
+    "Some Other Race Alone",
+    "Two or More Races"
+  )
+
+
+bay_education_race <-
+  1:7 %>% 
+  map_dfr(function(x){
+    getCensus(
+      name = "acs/acs5",
+      vintage = 2019,
+      region = "county:001,013,041,055,075,081,085,095,097",
+      regionin = "state:06",
+      vars = paste0("group(C15002",LETTERS[x],")")
+    ) %>%
+      select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+      pivot_longer(
+        ends_with("E"),
+        names_to = "name",
+        values_to = "estimate"
+      ) %>%
+      left_join(
+        acs_vars_2019_5yr %>% 
+          select(name, label)
+      ) %>% 
+      select(-name) %>% 
+      separate(
+        label,
+        into = c(NA,NA,NA,"education"),
+        sep = "!!"
+      ) %>% 
+      filter(!is.na(education)) %>% 
+      mutate(race = census_race_categories[x])
+  })
+
+```
+
+```{r, echo=FALSE}
+bay_education_race %>% 
+  group_by(education, race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = education %>% factor(levels = unique(bay_education_race$education)),
+      y = estimate,
+      fill = race %>% factor(levels = unique(bay_education_race$race))
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  labs(
+    x = "Household education",
+    y = "Number of households",
+    title = "Bay Area household education by race",
+    fill = "Race of householder"
+  ) +
+  coord_flip()
+
+
+
+bay_education_race %>% 
+  group_by(education, race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = education %>% factor(levels = rev(unique(bay_education_race$education))),
+      y = estimate,
+      fill = race %>% factor(levels = rev(unique(bay_education_race$race)))
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Household education",
+    y = "Proportion of households",
+    title = "Bay Area household education by race",
+    fill = "Race of householder"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+```
+
+
+
