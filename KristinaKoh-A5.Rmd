@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE,include=FALSE}
 library(tidyverse)
 library(censusapi)
 library(sf)
@@ -40,31 +40,27 @@ ces4_clean %>%
 
 ca_tracts <- tracts("CA")
 
-ca_tracts <- subset(ca_tracts,ca_tracts$COUNTYFP=="001"|ca_tracts$COUNTYFP=="013"|ca_tracts$COUNTYFP=="041"|ca_tracts$COUNTYFP=="055"|ca_tracts$COUNTYFP=="075"|ca_tracts$COUNTYFP=="081"|ca_tracts$COUNTYFP=="085"|ca_tracts$COUNTYFP=="095"|ca_tracts$COUNTYFP=="097")
 
-ces4_map <- ces4_clean %>% 
+ces4_clean <- subset(ces4_clean,ces4_clean$`California County`=="Alameda"|ces4_clean$`California County`== "Contra Costa"|ces4_clean$`California County`=="Marin"|ces4_clean$`California County`== "Napa"|ces4_clean$`California County`=="San Francisco"|ces4_clean$`California County`=="San Mateo"|ces4_clean$`California County`=="Santa Clara"|ces4_clean$`California County`=="Solano"|ces4_clean$`California County`=="Sonoma")
+
+ces4_clean <- ces4_clean %>% 
   left_join(
     ca_tracts %>% 
       transmute(GEOID = GEOID %>% as.numeric()),
     by = c("Census Tract" = "GEOID")
   ) %>% 
   st_as_sf()
-
-mapview(ces4_map, zcol = "Asthma")
-mapview(ces4_map,zcol="PM2.5")
+```
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+mapview(ces4_clean, zcol = "Asthma")
+mapview(ces4_clean,zcol="PM2.5")
 ```
 
 Before comparing the two maps, we can see how CalEnviroScreen measures people with asthma per 10,000 people. They count the number of emergency department visits averaged from 2015-2017. This is important because a lot of people suffer from asthma, but not everybody enters the emergency room for it. On the other hand, PM2.5 is measured based on available air quality monitors in the area averaged from 2015-2017 in weighted averages in ug/m3. This makes it difficult to compare the two maps as the asthma rates do not directly correlate with PM2.5 concentrations. We can see this further as we perform linear and log regression below.
 
-```{rr, echo=FALSE, warning=FALSE, message=FALSE}
-ces4_map<-na.omit(ces4_map)
-ggplot(
-  data = ces4_map,
-  aes(
-      x = PM2.5,
-      y = Asthma
-    )
-) +
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ces4_clean<-na.omit(ces4_clean)
+ggplot(data = ces4_clean,aes(x = PM2.5,y = Asthma)) +
   geom_point() +
   geom_smooth(method = "lm")
 
@@ -73,7 +69,7 @@ The apparent "best fit line" has a slight positive correlation between PM2.5 and
 
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-model<-lm(Asthma~PM2.5,ces4_map)
+model<-lm(Asthma~PM2.5,ces4_clean)
 summary(model)
 ```
 The summary of the model shows that there is little significance between the two relationships. An increase of 1.7423 ug/m3 in PM2.5 is associated with an increase of 1 Asthma case per 10,000 people. The variation in PM2.5 explains 1.15% of the variation in asthma cases. That's not very high!
@@ -86,7 +82,7 @@ plot(density(residuals(model)))
 
 The residual distribution has a high density of residuals below 0. This means there is asymmetrical distribution as the range of values is quite high. Since the r-squared values are low, we can see that the residual errors are high. (the model also says: Residual standard error is 30.32 on 7903 degrees of freedom)
 ```{r,echo=FALSE}
-logmodel<-lm(log(Asthma)~PM2.5,ces4_map)
+logmodel<-lm(log(Asthma)~PM2.5,ces4_clean)
 summary(logmodel)
 
 plot(density(residuals(logmodel)))
@@ -96,10 +92,10 @@ min(model$residuals)
 
 
 
-ces4_map_model<-ces4_map %>% mutate(residuals = residuals(model))
+ces4_map_model<-ces4_clean %>% mutate(residuals = residuals(model))
 mapview(ces4_map_model,zcol="residuals")
 
-ces4_map[which.min(ces4_map_model$residuals),]
+ces4_clean[which.min(ces4_map_model$residuals),]
 
 ```
 
