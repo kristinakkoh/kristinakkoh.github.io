@@ -1,0 +1,225 @@
+---
+title: "Final Assignment - Commute"
+author: "Kristina Koh"
+date: "12/5/21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,echo=FALSE, warning=FALSE, message=FALSE,include=FALSE}
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+library(dplyr)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+
+
+pums_2019_1yr <- readRDS("final_pums_2019.rds")
+
+pums_2018_1yr<-readRDS("final_pums_2018.rds")
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma",
+    "Santa Cruz",
+    "San Benito",
+    "San Joaquin",
+    "Stanislaus",
+    "Monterey",
+    "Sacramento",
+    "Yolo",
+    "Merced",
+    "Fresno",
+    "San Luis Obispo"
+  )
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+bay_counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% bay_county_names) 
+
+bay_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[bay_counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+bay_pums_2019 <-
+  pums_2019_1yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area,5,"left","0")
+  ) %>% 
+  filter(PUMA %in% bay_pumas$PUMACE10)
+
+bay_pums_clean_2019 <- bay_pums_2019 %>%
+  mutate(
+    JWMNP = as.numeric(JWMNP),
+    JWTRNS = as.numeric(JWTRNS),
+    SMARTPHONE = as.numeric(SMARTPHONE),
+    ACCESS = as.numeric(ACCESS),
+    RWAT = as.numeric(RWAT),
+    AGEP=as.numeric(AGEP),
+    PUMA = as.numeric(PUMA)
+  ) 
+bay_pums_com_2019 <-
+  bay_pums_2019 %>% 
+   mutate(
+    JWMNP = as.numeric(JWMNP),
+    JWTRNS = as.numeric(JWTRNS),
+    SMARTPHONE = as.numeric(SMARTPHONE),
+    ACCESS = as.numeric(ACCESS),
+    RWAT = as.numeric(RWAT),
+    AGEP=as.numeric(AGEP)
+  ) %>% 
+  filter(JWMNP>0) %>%
+  group_by(SERIALNO) %>% 
+  left_join(
+    bay_pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>%
+  filter(AGEP %in% 18:65)  %>%
+  st_as_sf()
+
+bay_pums_com_2019 <-  bay_pums_com_2019 %>% summarize(JWMNP=max(JWMNP),JWTRNS=JWTRNS, SMARTPHONE=SMARTPHONE, ACCESS=ACCESS,RWAT=RWAT,PUMA=PUMA, AGEP=AGEP,PINCP=PINCP, public_use_microdata_area=public_use_microdata_area)
+
+#%>% filter(YBL %in% 1:3) %>%
+ # mutate(leadrisk=ifelse(HINCP<90000 & AGEP %in% 0:6,1,0)) %>% group_by(SERIALNO,AGEP) %>% #summarize(leadrisk=last(leadrisk),BLD=BLD,TEN=TEN,PUMA=PUMA,MV=MV)
+
+pums_pal_2019 <- colorNumeric(
+  palette = "Purples",
+  domain = bay_pums_com_2019$JWMNP
+)
+
+
+
+```
+
+```{r,echo=FALSE, warning=FALSE, message=FALSE,include=FALSE}
+bay_pums_2018 <-
+  pums_2018_1yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area,5,"left","0")
+  ) %>% 
+  filter(PUMA %in% bay_pumas$PUMACE10)
+
+bay_pums_clean_2018 <- bay_pums_2018 %>%
+  mutate(
+    JWMNP = as.numeric(JWMNP),
+    JWTR = as.numeric(JWTR),
+    SMARTPHONE = as.numeric(SMARTPHONE),
+    ACCESS = as.numeric(ACCESS),
+    RWAT = as.numeric(RWAT),
+    AGEP=as.numeric(AGEP),
+    PUMA = as.numeric(PUMA)
+  ) 
+bay_pums_com_2018 <-
+  bay_pums_2018 %>% 
+  filter(!duplicated(SERIALNO)) %>% 
+   mutate(
+    JWMNP = as.numeric(JWMNP),
+    JWTR = as.numeric(JWTR),
+    SMARTPHONE = as.numeric(SMARTPHONE),
+    ACCESS = as.numeric(ACCESS),
+    RWAT = as.numeric(RWAT),
+    AGEP=as.numeric(AGEP)
+  ) %>% 
+  group_by(PUMA) %>% 
+  left_join(
+    bay_pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>%
+  filter(AGEP %in% 18:65) %>%
+  st_as_sf()
+#%>% filter(YBL %in% 1:3) %>%
+ # mutate(leadrisk=ifelse(HINCP<90000 & AGEP %in% 0:6,1,0)) %>% group_by(SERIALNO,AGEP) %>% #summarize(leadrisk=last(leadrisk),BLD=BLD,TEN=TEN,PUMA=PUMA,MV=MV)
+
+pums_pal_2018 <- colorNumeric(
+  palette = "Blues",
+  domain = bay_pums_com_2018$JWMNP
+)
+
+
+
+```
+
+
+2019 Map view of commute times
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = bay_pums_com_2019,
+    fillColor = ~pums_pal_2019(JWMNP),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0("Commute Time of", JWMNP, "minutes"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_pums_com_2019,
+    pal = pums_pal_2019,
+    values = ~JWMNP,
+    title = "Commute Time (minutes)"
+  )
+
+# logit_model <- glm(
+#   JWMNP/150 ~ PINCP,
+#   family = quasibinomial(),
+#   data = bay_pums_com_2019
+# )
+# 
+# summary(logit_model)
+# 
+# predict(logit_model, data.frame(PINCP=60000), type = "response")
+```
+
+```{r}
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = bay_pums_com_2018,
+    fillColor = ~pums_pal_2018(JWMNP),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0("Commute Time of", JWMNP, "minutes"),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_pums_com_2018,
+    pal = pums_pal_2018,
+    values = ~JWMNP,
+    title = "Commute Time (minutes)"
+  )
+```
+The output above shows the response and its probability. 
+
